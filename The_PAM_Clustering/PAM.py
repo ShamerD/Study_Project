@@ -12,7 +12,7 @@ def manhattan(x, y):
     Returns:
         Manhattan distance between x and y
     '''
-    return abs(np.sum(x - y))
+    return np.sum(np.absolute(x - y))
 
 
 def PAM_Build(d, k):
@@ -145,9 +145,6 @@ def PAM(X, k, dist=manhattan):
         totalDistance : sum of distances from points to their medoids
     '''
     n_objects = X.shape[0]
-    n_features = X.shape[1]
-    c = np.zeros((k, n_features))
-    C = np.zeros(n_objects)
 
     d = cdist(X, X, dist)  # distance matrix
 
@@ -166,7 +163,7 @@ def PAM(X, k, dist=manhattan):
     return c, C, totalDistance
 
 
-if __name__ == "__main__":  # example/will be more tests soon
+if __name__ == "__main__":  # example
     X = np.array([[1, 0, 3], [0, 3, 2], [6, 1, 3], [2, 4, 3], [3, 8, 1]])
     k = 2
     medoids, cluster, totalDistance = PAM(X, k)
