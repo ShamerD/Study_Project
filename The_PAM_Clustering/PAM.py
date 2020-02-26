@@ -180,9 +180,9 @@ def PAM(X, k, dist=manhattan, maxIter=1e4):
             tmp = d[i, np.array(list(S))]
             d_second[i] = np.partition(tmp, 1)[1]
 
-            S, C, totalDistance = PAM_Search(d, C, d_nearest,
-                                             d_second, S, U,
-                                             totalDistance, maxIter)
+        S, C, totalDistance = PAM_Search(d, C, d_nearest,
+                                         d_second, S, U,
+                                         totalDistance, maxIter)
 
     c = X[np.array(list(S)), :]
 
