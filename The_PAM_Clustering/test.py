@@ -1,5 +1,5 @@
 import numpy as np
-import matplotlib as plt
+import matplotlib.pyplot as plt
 import os
 from glob import glob
 from PIL import Image
@@ -7,9 +7,8 @@ from PAM import PAM
 from time import time
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
+new_test_dir = os.path.join(dir_path, "imgs_clustered")
 
-cwd = os.getcwd()
-new_test_dir = os.path.join(cwd, "imgs_clustered")
 if not os.path.exists(new_test_dir):
     os.mkdir(new_test_dir)  # create dir for test results
 
@@ -30,7 +29,7 @@ for img_path in glob(os.path.join(dir_path, 'imgs', '*')):  # get imgs
 
     img_name = "clustered_" + os.path.split(img_path)[-1]
     im = Image.fromarray(img_new).convert('RGB')
-    im.save(os.path.join(os.path.split(new_test_dir)[-1], img_name))
+    im.save(os.path.join(new_test_dir, img_name))
 
     fig = plt.figure(figsize=(16, 8))
     fig.add_subplot(1, 2, 1)
