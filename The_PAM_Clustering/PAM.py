@@ -64,7 +64,7 @@ def PAM_Build(d, k):
     return S, U, C, d_nearest, totalDistance
 
 
-def PAM_Search(d, C, d_nearest, d_second, S, U, totalDistance):
+def PAM_Search(d, C, d_nearest, d_second, S, U, totalDistance, maxIter):
     '''SWAP Phase for PAM Clustering
 
     Args:
@@ -75,6 +75,7 @@ def PAM_Search(d, C, d_nearest, d_second, S, U, totalDistance):
         S : set of numbers of medoids
         U : set of numbers of non-medoids
         totalDistance : sum of distances from points to their medoids
+        maxIter : maximum iterations in SWAP phase
 
     Returns:
         S : set of numbers of medoids
@@ -83,7 +84,9 @@ def PAM_Search(d, C, d_nearest, d_second, S, U, totalDistance):
     '''
     n_objects = d.shape[0]
     gets_better = True  # flag to continue
+    iter_count = 0
     while gets_better:
+        iter_count += 1
         gets_better = False
         diff_TD_best, m_best, x_best = 0, None, None
         for medoid in S:
@@ -127,17 +130,19 @@ def PAM_Search(d, C, d_nearest, d_second, S, U, totalDistance):
                                 C[i] = j
                         tmp = d[i, np.array(list(S))]
                         d_second[i] = np.partition(tmp, -2)[-2]
-
+            if iter_count >= maxIter:
+                break
     return S, C, totalDistance
 
 
-def PAM(X, k, dist=manhattan):
+def PAM(X, k, dist=manhattan, maxIter=1e4):
     '''The PAM Clustering algorithm
 
     Args:
         X : array of shape(n_objects, n_features)
         k : desired number of clusters
         dist : distance function, default - manhattan distance
+        maxIter : maximum iterations in SWAP phase
 
     Returns:
         c : array of shape(k, n_features) - medoids
@@ -156,7 +161,7 @@ def PAM(X, k, dist=manhattan):
         d_second[i] = np.partition(tmp, -2)[-2]
 
     S, C, totalDistance = PAM_Search(d, C, d_nearest,
-                                     d_second, S, U, totalDistance)
+                                     d_second, S, U, totalDistance, maxIter)
 
     c = X[np.array(list(S)), :]
 
