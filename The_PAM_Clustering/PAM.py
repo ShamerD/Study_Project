@@ -64,7 +64,7 @@ def PAM_Build(d, k):
     return S, U, C, d_nearest, totalDistance
 
 
-def PAM_Search(d, C, d_nearest, d_second, S, U, totalDistance):
+def PAM_Search(d, C, d_nearest, d_second, S, U, totalDistance, maxIter):
     '''SWAP Phase for PAM Clustering
 
     Args:
@@ -75,6 +75,7 @@ def PAM_Search(d, C, d_nearest, d_second, S, U, totalDistance):
         S : set of numbers of medoids
         U : set of numbers of non-medoids
         totalDistance : sum of distances from points to their medoids
+        maxIter : maximum iterations in SWAP phase
 
     Returns:
         S : set of numbers of medoids
@@ -83,24 +84,43 @@ def PAM_Search(d, C, d_nearest, d_second, S, U, totalDistance):
     '''
     n_objects = d.shape[0]
     gets_better = True  # flag to continue
+    iter_count = 0
+
     while gets_better:
+        iter_count += 1
         gets_better = False
         diff_TD_best, m_best, x_best = 0, None, None
-        for medoid in S:
-            for non_medoid in U:  # consider role swap of this objects
-                diff_TD = 0  # evaluate difference in total distance
-                for other in U:
-                    if other == non_medoid:
-                        continue
-                    delta = 0
-                    if C[other] == medoid:  # then other should go to second
-                        delta = min(d[other, non_medoid],  # or non-medoid
-                                    d_second[other]) - d_nearest[other]
-                    else:  # else other should stay or go to non-medoid
-                        delta = min(d[other, non_medoid] - d_nearest[other], 0)
-                    diff_TD += delta
-                if diff_TD < diff_TD_best:
-                    diff_TD_best, m_best, x_best = diff_TD, medoid, non_medoid
+
+        med2ord = {}  # map from global medoid id to medoid id (<k)
+        ord2med = {}  # vice versa
+        for i, elem in enumerate(S):
+            med2ord[elem] = i
+            ord2med[i] = elem
+
+        for non_medoid in U:
+            delta = np.zeros(len(S))  # delta for each medoid (size k)
+            delta -= d_nearest[non_medoid]  # loss for making non-med a medoid
+            for other in range(n_objects):  # each point
+                if other == non_medoid:
+                    continue
+                nearest = med2ord[C[other]]
+
+                # change for nearest
+                delta[nearest] += min(d[other, non_medoid],
+                                      d_second[other]) - d_nearest[other]
+
+                # change for non-nearest
+                change = d[other, non_medoid] - d_nearest[other]
+                if change < 0:
+                    delta += change
+                    delta[nearest] -= change  # already counted before
+
+            best_medoid = int(np.argmin(delta))
+            if delta[best_medoid] < diff_TD_best:
+                diff_TD_best = delta[best_medoid]
+                m_best = ord2med[best_medoid]
+                x_best = non_medoid
+
         if diff_TD_best < 0:  # perform best swap
             gets_better = True
             S.remove(m_best)
@@ -108,6 +128,7 @@ def PAM_Search(d, C, d_nearest, d_second, S, U, totalDistance):
             U.remove(x_best)
             U.add(m_best)
             totalDistance += diff_TD_best
+
             for i in range(n_objects):  # upgrade nearest, second nearest
                 if C[i] != m_best:
                     if d[i, x_best] < d_nearest[i]:
@@ -115,7 +136,8 @@ def PAM_Search(d, C, d_nearest, d_second, S, U, totalDistance):
                         d_second[i] = d_nearest[i]
                         d_nearest[i] = d[i, x_best]
                     else:
-                        d_second[i] = min(d_second[i], d[i, x_best])
+                        tmp = d[i, np.array(list(S))]
+                        d_second[i] = np.partition(tmp, 1)[1]
                 else:
                     if d[i, x_best] < d_second[i]:
                         C[i] = x_best
@@ -126,18 +148,20 @@ def PAM_Search(d, C, d_nearest, d_second, S, U, totalDistance):
                             if d[i, j] == d_nearest[i]:
                                 C[i] = j
                         tmp = d[i, np.array(list(S))]
-                        d_second[i] = np.partition(tmp, -2)[-2]
-
+                        d_second[i] = np.partition(tmp, 1)[1]
+            if iter_count >= maxIter:
+                break
     return S, C, totalDistance
 
 
-def PAM(X, k, dist=manhattan):
+def PAM(X, k, dist=manhattan, maxIter=1e4):
     '''The PAM Clustering algorithm
 
     Args:
         X : array of shape(n_objects, n_features)
         k : desired number of clusters
         dist : distance function, default - manhattan distance
+        maxIter : maximum iterations in SWAP phase
 
     Returns:
         c : array of shape(k, n_features) - medoids
@@ -150,13 +174,15 @@ def PAM(X, k, dist=manhattan):
 
     S, U, C, d_nearest, totalDistance = PAM_Build(d, k)  # see PAM_Build
 
-    d_second = np.zeros(n_objects)  # distance to second nearest medoid
-    for i in range(n_objects):
-        tmp = d[i, np.array(list(S))]
-        d_second[i] = np.partition(tmp, -2)[-2]
+    if k > 1:
+        d_second = np.zeros(n_objects)  # distance to second nearest medoid
+        for i in range(n_objects):
+            tmp = d[i, np.array(list(S))]
+            d_second[i] = np.partition(tmp, 1)[1]
 
-    S, C, totalDistance = PAM_Search(d, C, d_nearest,
-                                     d_second, S, U, totalDistance)
+        S, C, totalDistance = PAM_Search(d, C, d_nearest,
+                                         d_second, S, U,
+                                         totalDistance, maxIter)
 
     c = X[np.array(list(S)), :]
 
