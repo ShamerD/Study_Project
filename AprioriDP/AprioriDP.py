@@ -88,3 +88,88 @@ def construct_frequent_sets(T, item2num, num2item, min_supp):
         k += 1
 
     return L, freq_size
+
+
+def check_subset(common_subset, current_subset, rules, min_conf, freq_size):
+    '''Recursively check whether (cur -> (comm - cur)) is a confident rule
+
+    Args:
+        common_subset : subset to check
+        current_subset : subset to check
+        rules : list of tuples ((from), (to), confidence) - changable object
+        min_conf : confidence (supp(from | to) / supp(from)) constraint
+        freq_size : number of times each subset contains in database
+
+    Returns:
+        nothing
+    '''
+    cur_confidence = freq_size[common_subset] / freq_size[current_subset]
+
+    # check confidence constraint
+    if (cur_confidence >= min_conf):
+        # add only if (to) is not empty
+        if (common_subset != current_subset):
+            rules.append((tuple(current_subset),
+                          tuple(common_subset.difference(current_subset)),
+                          cur_confidence))
+        # check for subset of size - 1
+        for element in current_subset:
+            new_cur_subset = frozenset(current_subset.difference(element))
+            check_subset(common_subset, new_cur_subset,
+                         rules, min_conf, freq_size)
+
+
+def construct_rules(frequent_sets, freq_size, min_conf):
+    '''Construct confident rules based on frequent subsets
+
+    Args:
+        frequent_sets : set of frequent subsets
+        freq_size : map from freq subset to number of times it contains in DB
+        min_conf : confidence constraint
+    '''
+    rules = []
+    for common_subset in frequent_sets:
+        check_subset(common_subset, common_subset, rules, min_conf, freq_size)
+    return rules
+
+
+def apriori(T, min_supp, min_conf):
+    '''Run AprioriDP on database T
+
+    Args:
+        T: database - iterable that contains sets of items
+        min_supp : minimum support constraint
+        min_conf : minimum confidence constraint
+
+    Returns:
+        freq_subsets : frequent subsets that satisfy support constraint
+                       list of (set, support)
+        conf_rules : rules that satisfy confidence constraint
+                     list of (from, to, confidence)
+    '''
+    # maps used in construct freq sets
+    item2num = {}
+    num2item = {}
+    items = set()
+
+    # construct all-items set
+    for transaction in T:
+        for item in transaction:
+            items.add(item)
+
+    # fill maps
+    for num, item in enumerate(items):
+        num2item[num] = item
+        item2num[item] = num
+
+    L, freq_size = construct_frequent_sets(T, item2num, num2item, min_supp)
+
+    # to return format
+    freq_subsets = []
+    for subset in L:
+        freq_subsets.append((tuple(subset), freq_size[subset]))
+
+    # construct rules
+    conf_rules = construct_rules(L, freq_size, min_conf)
+
+    return freq_subsets, conf_rules
