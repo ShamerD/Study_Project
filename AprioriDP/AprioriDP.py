@@ -79,9 +79,9 @@ def construct_frequent_sets(T, item2num, num2item, min_supp):
     # try to get freq sets of bigger size
     while len(L_k) != 0:
         C_k.clear()
-        L_k.clear()
-
         C_k = generate_candidate_set(L_k, k)
+
+        L_k.clear()
         L_k = generate_frequent_set(C_k, T, freq_size, min_supp)
 
         L.update(L_k)
@@ -103,6 +103,9 @@ def check_subset(common_subset, current_subset, rules, min_conf, freq_size):
     Returns:
         nothing
     '''
+    if len(current_subset) == 0:
+        return
+
     cur_confidence = freq_size[common_subset] / freq_size[current_subset]
 
     # check confidence constraint
@@ -114,8 +117,8 @@ def check_subset(common_subset, current_subset, rules, min_conf, freq_size):
                           cur_confidence))
         # check for subset of size - 1
         for element in current_subset:
-            new_cur_subset = frozenset(current_subset.difference(element))
-            check_subset(common_subset, new_cur_subset,
+            new_subset = frozenset(current_subset.difference(set([element])))
+            check_subset(common_subset, new_subset,
                          rules, min_conf, freq_size)
 
 
@@ -151,6 +154,7 @@ def apriori(T, min_supp, min_conf):
     item2num = {}
     num2item = {}
     items = set()
+    p = len(T)
 
     # construct all-items set
     for transaction in T:
@@ -167,7 +171,7 @@ def apriori(T, min_supp, min_conf):
     # to return format
     freq_subsets = []
     for subset in L:
-        freq_subsets.append((tuple(subset), freq_size[subset]))
+        freq_subsets.append((tuple(subset), freq_size[subset] / p))
 
     # construct rules
     conf_rules = construct_rules(L, freq_size, min_conf)
