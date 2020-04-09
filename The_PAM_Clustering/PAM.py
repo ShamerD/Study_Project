@@ -154,7 +154,7 @@ def PAM_Search(d, C, d_nearest, d_second, S, U, totalDistance, maxIter):
     return S, C, totalDistance
 
 
-def PAM(X, k, dist=manhattan, maxIter=1e4):
+def PAM(X, k, dist=manhattan, maxIter=10000):
     '''The PAM Clustering algorithm
 
     Args:
