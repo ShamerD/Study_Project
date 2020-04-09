@@ -35,6 +35,7 @@ class DBClusterResult(db.Model):
     experiments = db.relationship('DBExperiment',
                                   backref=db.backref('clusters', lazy=True))
 
+    stud_id = db.Column(db.Integer)  # TODO change to ForeignKey
     # stud_id = db.Column(db.Integer, db.ForeignKey('stud.id'), nullable=False)
     # stud = db.relationship('Student')  # TODO db from other resource
 
@@ -126,14 +127,22 @@ class Experiment(Resource):
             param_string = "algo == %s, k == %d" % ('PAM', args['k'])
             if args['max_iter'] is None:
                 param_string += ", maxIter == 10000"
-                medoids, cluster, totalDistance = PAM(args['dataset'],
+                medoid, clusters, totalDistance = PAM(args['dataset'],
                                                       args['k'])
             else:
                 param_string += (", maxIter == " + str(args['max_iter']))
-                medoids, cluster, totalDistance = PAM(args['dataset'],
+                medoid, clusters, totalDistance = PAM(args['dataset'],
                                                       args['k'],
                                                       maxIter=args['max_iter'])
-            # work with output
+            # TODO type usage
+            for (item, _cluster) in enumerate(clusters):
+                # stud = studDB.query.get(item)
+                cluster_res = DBClusterResult(experiments=experiment,
+                                              cluster=_cluster,
+                                              stud_id=item,
+                                              type=False)
+                db.session.add(cluster_res)
+            db.session.commit()
         else:
             param_format = """algo == %s, min_supp == %f, min_conf == %f"""
             param_tuple = ('AprioriDP', args['min_supp'], args['min_conf'])
@@ -141,7 +150,13 @@ class Experiment(Resource):
             freq_subsets, conf_rules = apriori(args['dataset'],
                                                args['min_supp'],
                                                args['min_conf'])
-            # work with output
+            for _rule in conf_rules:
+                # stud = studDB.query.get(item)
+                rule_str = "(%s => %s, confidence==%f)" % _rule
+                rule_res = DBRuleResult(experiments=experiment,
+                                        rule=rule_str)
+                db.session.add(rule_res)
+            db.session.commit()
 
         experiment.params = param_string
         return output, 201
