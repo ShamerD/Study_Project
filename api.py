@@ -20,14 +20,14 @@ experiments = {}
 class DBExperiment(db.Model):
     __tablename__ = 'experiments'
     id = db.Column(db.Integer, primary_key=True)
-    params = db.Column(db.Text, nullable=False)
+    params = db.Column(db.Text)
 
     def __repr__(self):
         return "<Experiment %d with parameters %s>" % (self.id, self.params)
 
 
 class DBClusterResult(db.Model):
-    __tablename__ = 'cluster_results'
+    __tablename__ = 'clusters'
     id = db.Column(db.Integer, primary_key=True)
 
     exp_id = db.Column(db.Integer,
@@ -49,7 +49,7 @@ class DBClusterResult(db.Model):
 
 
 class DBRuleResult(db.Model):
-    __tablename__ = 'rule_results'
+    __tablename__ = 'rules'
     id = db.Column(db.Integer, primary_key=True)
     exp_id = db.Column(db.Integer,
                        db.ForeignKey('experiments.id'), nullable=False)
@@ -60,20 +60,34 @@ class DBRuleResult(db.Model):
 
 
 def check_if_exp_exists(exp_id):
-    if exp_id not in experiments:
+    exp_in_db = DBExperiment.query.get(exp_id)
+    if exp_in_db is None:
         abort(404, message="experiment {} doesn't exist".format(exp_id))
 
 
 # Experiment
 # shows a single experiment item, can be started once by POST and deleted
 class Experiment(Resource):
-    def get(self, exp_id):
-        check_if_exp_exists(exp_id)
-        return experiments[exp_id]
+    def get(self, e_id):
+        exp_in_db = DBExperiment.query.get(e_id)
+        if exp_in_db is None:
+            abort(404, message="experiment {} doesn't exist".format(e_id))
+
+        if exp_in_db.params is None:
+            return DBExperiment.query.get(e_id)
+        elif 'PAM' in exp_in_db.params:
+            return DBClusterResult.query.filter_by(exp_id=e_id)
+        elif 'AprioriDP' in exp_in_db.params:
+            return DBRuleResult.query.filter_by(exp_id=e_id)
+        else:
+            raise ValueError
 
     def delete(self, exp_id):
-        check_if_exp_exists(exp_id)
-        del experiments[exp_id]
+        exp_in_db = DBExperiment.query.get(exp_id)
+        if exp_in_db is None:
+            abort(404, message="experiment {} doesn't exist".format(exp_id))
+        db.session.delete(exp_in_db)
+        db.session.commit()
         return '', 204
 
     def post(self, exp_id):
@@ -85,12 +99,16 @@ class Experiment(Resource):
         parser.add_argument('min_conf', type=float)
         parser.add_argument('max_iter', type=int)
         args = parser.parse_args()
+        experiment = DBExperiment.query.get(exp_id)
 
         if args['algo'] not in ['PAM', 'AprioriDP']:
             abort(400,
                   message="algo should be one of following: PAM or AprioriDP")
 
-        if experiments[exp_id] != {}:
+        if experiment is None:
+            abort(404, message="no page for this experiment, post one")
+
+        if experiment.params is not None:
             abort(409, message="this experiment is over, start new")
 
         if args['dataset'] is None:
@@ -101,18 +119,31 @@ class Experiment(Resource):
 
         if args['algo'] == 'AprioriDP' and (args['min_supp'] is None
                                             or args['min_conf'] is None):
-            abort(400, message="min_supp and min_conf are required")
+            abort(400, message="min_supp and min_conf are required in apriori")
 
         output = {}
         if args['algo'] == 'PAM':
-            medoids, cluster, totalDistance = PAM(args['dataset'], args['k'])
+            param_string = "algo == %s, k == %d" % ('PAM', args['k'])
+            if args['max_iter'] is None:
+                param_string += ", maxIter == 10000"
+                medoids, cluster, totalDistance = PAM(args['dataset'],
+                                                      args['k'])
+            else:
+                param_string += (", maxIter == " + str(args['max_iter']))
+                medoids, cluster, totalDistance = PAM(args['dataset'],
+                                                      args['k'],
+                                                      maxIter=args['max_iter'])
             # work with output
         else:
+            param_format = """algo == %s, min_supp == %f, min_conf == %f"""
+            param_tuple = ('AprioriDP', args['min_supp'], args['min_conf'])
+            param_string = (param_format % param_tuple)
             freq_subsets, conf_rules = apriori(args['dataset'],
                                                args['min_supp'],
                                                args['min_conf'])
             # work with output
-        experiments[exp_id] = output
+
+        experiment.params = param_string
         return output, 201
 
 
@@ -120,15 +151,14 @@ class Experiment(Resource):
 # shows a list of all experiments, and lets you POST to add new tasks
 class ExperimentList(Resource):
     def get(self):
-        return experiments
+        return DBExperiment.query.order_by(DBExperiment.id).all()
 
     def post(self):
-        if (len(experiments.keys()) == 0):
-            exp_id = 1
-        else:
-            exp_id = int(max(experiments.keys())) + 1
-        experiments[exp_id] = {}
-        return experiments[exp_id], 201
+        experiment = DBExperiment(params=None)
+        db.session.add(experiment)
+        db.session.commit()
+        # experiments[exp_id] = {}
+        return experiment, 201
 
 
 # setup
