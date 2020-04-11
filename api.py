@@ -1,29 +1,115 @@
-from flask import Flask
+from flask import Flask, jsonify
 from flask_restful import reqparse, abort, Api, Resource
+from flask_sqlalchemy import SQLAlchemy
 from AprioriDP.AprioriDP import apriori
 from The_PAM_Clustering.PAM import PAM
 
+# Flask aplication
 app = Flask(__name__)
+
+# SQLAlchemy
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///db\\experiments.db'
+db = SQLAlchemy(app)
+
+# Flask_restful
 api = Api(app)
 
-experiments = {}
+
+class DBExperiment(db.Model):
+    __tablename__ = 'experiments'
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    params = db.Column(db.Text, nullable=True)
+
+    def __repr__(self):
+        return "<Experiment %d with parameters %s>" % (self.id, self.params)
+
+    def tojson(self):
+        return {
+            "id": self.id,
+            "params": self.params,
+        }
 
 
-def check_if_exp_exists(exp_id):
-    if exp_id not in experiments:
-        abort(404, message="experiment {} doesn't exist".format(exp_id))
+class DBClusterResult(db.Model):
+    __tablename__ = 'clusters'
+    id = db.Column(db.Integer, primary_key=True)
+
+    exp_id = db.Column(db.Integer,
+                       db.ForeignKey('experiments.id'), nullable=False)
+    experiments = db.relationship('DBExperiment',
+                                  backref=db.backref('clusters', lazy=True))
+
+    stud_id = db.Column(db.Integer)  # TODO change to ForeignKey
+    # stud_id = db.Column(db.Integer, db.ForeignKey('stud.id'), nullable=False)
+    # stud = db.relationship('Student')  # TODO db from other resource
+
+    cluster = db.Column(db.Integer, nullable=False)
+    type = db.Column(db.Boolean, nullable=False)
+
+    def __repr__(self):
+        return '''<Cluster experiment %d shows
+                student %d is in cluster %d>''' % (self.exp_id,
+                                                   self.stud_id,
+                                                   self.cluster)
+
+    def tojson(self):
+        return {
+            "exp_id": self.exp_id,
+            "stud_id": self.stud_id,
+            "cluster": self.cluster,
+            "type": self.type,
+        }
+
+
+class DBRuleResult(db.Model):
+    __tablename__ = 'rules'
+    id = db.Column(db.Integer, primary_key=True)
+    exp_id = db.Column(db.Integer,
+                       db.ForeignKey('experiments.id'), nullable=False)
+    experiments = db.relationship('DBExperiment',
+                                  backref=db.backref('rules', lazy=True))
+
+    rule = db.Column(db.Text, nullable=False)
+
+    def __repr__(self):
+        return '''<Rule experiment %d shows %s>''' % (self.exp_id,
+                                                      self.rule)
+
+    def tojson(self):
+        return {
+            "exp_id": self.exp_id,
+            "rule": self.rule,
+        }
 
 
 # Experiment
 # shows a single experiment item, can be started once by POST and deleted
 class Experiment(Resource):
     def get(self, exp_id):
-        check_if_exp_exists(exp_id)
-        return experiments[exp_id]
+        exp_in_db = DBExperiment.query.get(exp_id)
+        if exp_in_db is None:
+            abort(404, message="experiment {} doesn't exist".format(exp_id))
+
+        if exp_in_db.params is None:
+            return exp_in_db.tojson()
+        elif 'PAM' in exp_in_db.params:
+            exps = []
+            for exp in DBClusterResult.query.filter_by(exp_id=exp_id):
+                exps.append(exp.tojson())
+            return jsonify(exps)
+        elif 'AprioriDP' in exp_in_db.params:
+            for exp in DBRuleResult.query.filter_by(exp_id=exp_id):
+                exps.append(exp.tojson())
+            return jsonify(exps)
+        else:
+            raise ValueError
 
     def delete(self, exp_id):
-        check_if_exp_exists(exp_id)
-        del experiments[exp_id]
+        exp_in_db = DBExperiment.query.get(exp_id)
+        if exp_in_db is None:
+            abort(404, message="experiment {} doesn't exist".format(exp_id))
+        db.session.delete(exp_in_db)
+        db.session.commit()
         return '', 204
 
     def post(self, exp_id):
@@ -35,12 +121,16 @@ class Experiment(Resource):
         parser.add_argument('min_conf', type=float)
         parser.add_argument('max_iter', type=int)
         args = parser.parse_args()
+        experiment = DBExperiment.query.get(exp_id)
 
         if args['algo'] not in ['PAM', 'AprioriDP']:
             abort(400,
                   message="algo should be one of following: PAM or AprioriDP")
 
-        if experiments[exp_id] != {}:
+        if experiment is None:
+            abort(404, message="no page for this experiment, post one")
+
+        if experiment.params is not None:
             abort(409, message="this experiment is over, start new")
 
         if args['dataset'] is None:
@@ -51,40 +141,74 @@ class Experiment(Resource):
 
         if args['algo'] == 'AprioriDP' and (args['min_supp'] is None
                                             or args['min_conf'] is None):
-            abort(400, message="min_supp and min_conf are required")
+            abort(400, message="min_supp and min_conf are required in apriori")
 
-        output = {}
+        output = []
         if args['algo'] == 'PAM':
-            medoids, cluster, totalDistance = PAM(args['dataset'], args['k'])
-            # work with output
+            param_string = "algo == %s, k == %d" % ('PAM', args['k'])
+            if args['max_iter'] is None:
+                param_string += ", maxIter == 10000"
+                medoid, clusters, totalDistance = PAM(args['dataset'],
+                                                      args['k'])
+            else:
+                param_string += (", maxIter == " + str(args['max_iter']))
+                medoid, clusters, totalDistance = PAM(args['dataset'],
+                                                      args['k'],
+                                                      maxIter=args['max_iter'])
+            # TODO type usage
+            for (item, _cluster) in enumerate(clusters):
+                # stud = studDB.query.get(item)
+                cluster_res = DBClusterResult(experiments=experiment,
+                                              cluster=_cluster,
+                                              stud_id=item,
+                                              type=False)
+                db.session.add(cluster_res)
+                output.append(cluster_res.tojson())
+            db.session.commit()
         else:
+            param_format = """algo == %s, min_supp == %f, min_conf == %f"""
+            param_tuple = ('AprioriDP', args['min_supp'], args['min_conf'])
+            param_string = (param_format % param_tuple)
             freq_subsets, conf_rules = apriori(args['dataset'],
                                                args['min_supp'],
                                                args['min_conf'])
-            # work with output
-        experiments[exp_id] = output
-        return output, 201
+            for _rule in conf_rules:
+                # stud = studDB.query.get(item)
+                rule_str = "(%s => %s, confidence==%f)" % _rule
+                rule_res = DBRuleResult(experiments=experiment,
+                                        rule=rule_str)
+                db.session.add(rule_res)
+                output.append(rule_res.tojson())
+            db.session.commit()
+
+        experiment.params = param_string
+        return jsonify(output), 201
 
 
 # ExperimentList
 # shows a list of all experiments, and lets you POST to add new tasks
 class ExperimentList(Resource):
     def get(self):
-        return experiments
+        exps = []
+        for exp in DBExperiment.query.order_by(DBExperiment.id).all():
+            exps.append(exp.tojson())
+        return jsonify(exps)
 
     def post(self):
-        if (len(experiments.keys()) == 0):
-            exp_id = 1
-        else:
-            exp_id = int(max(experiments.keys())) + 1
-        experiments[exp_id] = {}
-        return experiments[exp_id], 201
+        experiment = DBExperiment(params=None)
+        db.session.add(experiment)
+        db.session.commit()
+        # experiments[exp_id] = {}
+        return experiment.tojson(), 201
 
 
 # setup
-api.add_resource(ExperimentList, '/experiments')
+api.add_resource(ExperimentList, '/experiments',
+                 '/', '/experiments/',
+                 endpoint='experiments')
 api.add_resource(Experiment, '/experiments/<int:exp_id>')
 
 
 if __name__ == '__main__':
+    db.create_all()
     app.run(debug=True)
