@@ -1,5 +1,4 @@
 import numpy as np
-from scipy.spatial.distance import cdist
 
 
 def manhattan(x, y):
@@ -158,19 +157,24 @@ def PAM(X, k, dist=manhattan, maxIter=10000):
     '''The PAM Clustering algorithm
 
     Args:
-        X : array of shape(n_objects, n_features)
+        X : iterable of size (n_objects)
         k : desired number of clusters
         dist : distance function, default - manhattan distance
         maxIter : maximum iterations in SWAP phase
 
     Returns:
-        c : array of shape(k, n_features) - medoids
+        c : list of medoids of size k
         C : list of size n_objects - cluster labels for each point
         totalDistance : sum of distances from points to their medoids
     '''
-    n_objects = X.shape[0]
+    n_objects = len(X)
 
-    d = cdist(X, X, dist)  # distance matrix
+    tmp_d = [[0 for _ in range(n_objects)] for j in range(n_objects)]
+    for i, item1 in enumerate(X):
+        for j, item2 in enumerate(X):
+            tmp_d[i][j] = dist(item1, item2)
+
+    d = np.array(tmp_d)
 
     S, U, C, d_nearest, totalDistance = PAM_Build(d, k)  # see PAM_Build
 
@@ -184,7 +188,9 @@ def PAM(X, k, dist=manhattan, maxIter=10000):
                                          d_second, S, U,
                                          totalDistance, maxIter)
 
-    c = X[np.array(list(S)), :]
+    c = []
+    for med in S:
+        c.append(X[med])
 
     return c, C, totalDistance
 
