@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 
 
 def manhattan(x, y):
@@ -12,6 +13,23 @@ def manhattan(x, y):
         Manhattan distance between x and y
     '''
     return np.sum(np.absolute(x - y))
+
+
+def tutordist(x, y):
+    mark2num = {'лучше не бывает!': 10,
+                'отлично': 9,
+                'почти отлично': 8,
+                'вполне хорошо': 7,
+                'хорошо': 6,
+                'почти хорошо': 5,
+                'более-менее': 4,
+                'так себе...': 3,
+                'плохо': 2,
+                'ужасно': 1}
+
+    result = 0
+    result += abs(mark2num[x['mark']] - mark2num[y['mark']])
+    return result
 
 
 def PAM_Build(d, k):
@@ -163,15 +181,15 @@ def PAM(X, k, dist=manhattan, maxIter=10000):
         maxIter : maximum iterations in SWAP phase
 
     Returns:
-        c : list of medoids of size k
+        med: list of medoids' indexes
         C : list of size n_objects - cluster labels for each point
         totalDistance : sum of distances from points to their medoids
     '''
     n_objects = len(X)
 
     tmp_d = [[0 for _ in range(n_objects)] for j in range(n_objects)]
-    for i, item1 in enumerate(X):
-        for j, item2 in enumerate(X):
+    for i, item1 in X.iterrows():
+        for j, item2 in X.iterrows():
             tmp_d[i][j] = dist(item1, item2)
 
     d = np.array(tmp_d)
@@ -188,17 +206,20 @@ def PAM(X, k, dist=manhattan, maxIter=10000):
                                          d_second, S, U,
                                          totalDistance, maxIter)
 
-    c = []
-    for med in S:
-        c.append(X[med])
-
-    return c, C, totalDistance
+    return list(S), C, totalDistance
 
 
 if __name__ == "__main__":  # example
-    X = np.array([[1, 0, 3], [0, 3, 2], [6, 1, 3], [2, 4, 3], [3, 8, 1]])
+    X = pd.DataFrame({'a': [1, 0, 6, 2, 3],
+                      'b': [0, 3, 1, 4, 8],
+                      'c': [3, 2, 3, 3, 1]})
+    # X = np.array([[1, 0, 3], [0, 3, 2], [6, 1, 3], [2, 4, 3], [3, 8, 1]])
     k = 2
-    medoids, cluster, totalDistance = PAM(X, k)
+    medoids_idx, cluster, totalDistance = PAM(X, k)
+    print(X)
+    print('---------')
     print(totalDistance)
-    print(medoids)
+    print('---------')
+    print(medoids_idx)
+    print('---------')
     print(cluster)
