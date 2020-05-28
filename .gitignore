@@ -3,3 +3,6 @@ __pycache__/
 
 #db files
 db/
+
+#huge dataset
+data/tutors.csv
