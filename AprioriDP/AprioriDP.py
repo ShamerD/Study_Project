@@ -168,7 +168,7 @@ def apriori(T, min_supp, min_conf):
 
     L, freq_size = construct_frequent_sets(T, item2num, num2item, min_supp)
 
-    # to return format
+    # return format
     freq_subsets = []
     for subset in L:
         freq_subsets.append((tuple(subset), freq_size[subset] / p))

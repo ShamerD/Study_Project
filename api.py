@@ -207,7 +207,7 @@ class Experiment(Resource):
 
         experiment.params = param_string
         db.session.commit()
-        return jsonify(output), 201
+        return "Success", 201
 
 
 # ExperimentList
