@@ -3,12 +3,28 @@ from flask_restful import reqparse, abort, Api, Resource
 from flask_sqlalchemy import SQLAlchemy
 from AprioriDP.AprioriDP import apriori
 from The_PAM_Clustering.PAM import PAM
+import pandas as pd
+import urllib
+import pyodbc
+import os
+import sys
+
+login = sys.argv[1]
+pwd = sys.argv[2]
 
 # Flask aplication
 app = Flask(__name__)
 
+connection_string = "Driver={ODBC Driver 17 for SQL Server};"\
+                    "Server=tcp:opendataserver2020.database.windows.net;"\
+                    "Database=OpenDataDbms;"\
+                    "uid=stud20;pwd=!Student2020"
+
+cs1 = urllib.parse.quote_plus(connection_string)
+pa = "mssql+pyodbc:///?odbc_connect=%s" % cs1
+
 # SQLAlchemy
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///db\\experiments.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = pa
 db = SQLAlchemy(app)
 
 # Flask_restful
@@ -16,7 +32,7 @@ api = Api(app)
 
 
 class DBExperiment(db.Model):
-    __tablename__ = 'experiments'
+    __tablename__ = 'tw_ayupov_experiments'
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     params = db.Column(db.Text, nullable=True)
 
@@ -31,11 +47,12 @@ class DBExperiment(db.Model):
 
 
 class DBClusterResult(db.Model):
-    __tablename__ = 'clusters'
+    __tablename__ = 'tw_ayupov_clusters'
     id = db.Column(db.Integer, primary_key=True)
 
     exp_id = db.Column(db.Integer,
-                       db.ForeignKey('experiments.id'), nullable=False)
+                       db.ForeignKey('tw_ayupov_experiments.id'),
+                       nullable=False)
     experiments = db.relationship('DBExperiment',
                                   backref=db.backref('clusters', lazy=True))
 
@@ -62,10 +79,11 @@ class DBClusterResult(db.Model):
 
 
 class DBRuleResult(db.Model):
-    __tablename__ = 'rules'
+    __tablename__ = 'tw_ayupov_rules'
     id = db.Column(db.Integer, primary_key=True)
     exp_id = db.Column(db.Integer,
-                       db.ForeignKey('experiments.id'), nullable=False)
+                       db.ForeignKey('tw_ayupov_experiments.id'),
+                       nullable=False)
     experiments = db.relationship('DBExperiment',
                                   backref=db.backref('rules', lazy=True))
 
@@ -110,12 +128,12 @@ class Experiment(Resource):
             abort(404, message="experiment {} doesn't exist".format(exp_id))
         db.session.delete(exp_in_db)
         db.session.commit()
-        return '', 204
+        return 'Successfully deleted', 204
 
     def post(self, exp_id):
         parser = reqparse.RequestParser()
         parser.add_argument('algo', required=True, help="algo cannot be blank")
-        parser.add_argument('dataset')  # TODO what type
+        parser.add_argument('dataset', type=int)
         parser.add_argument('k', type=int)
         parser.add_argument('min_supp', type=float)
         parser.add_argument('min_conf', type=float)
@@ -146,25 +164,33 @@ class Experiment(Resource):
         output = []
         if args['algo'] == 'PAM':
             param_string = "algo == %s, k == %d" % ('PAM', args['k'])
+            dsnum = args['dataset']
+            if dsnum == 1:
+                dspath = os.path.abspath('./data/tutors_small.csv')
+            else:
+                dspath = os.path.abspath('./data/tutors.csv')
+
+            ds = pd.read_csv(dspath, sep=';', encoding='utf-8')
             if args['max_iter'] is None:
                 param_string += ", maxIter == 10000"
-                medoid, clusters, totalDistance = PAM(args['dataset'],
+                medidx, clusters, totalDistance = PAM(ds,
                                                       args['k'])
             else:
                 param_string += (", maxIter == " + str(args['max_iter']))
-                medoid, clusters, totalDistance = PAM(args['dataset'],
+                medidx, clusters, totalDistance = PAM(ds,
                                                       args['k'],
                                                       maxIter=args['max_iter'])
-            # TODO type usage
+
             for (item, _cluster) in enumerate(clusters):
-                # stud = studDB.query.get(item)
                 cluster_res = DBClusterResult(experiments=experiment,
                                               cluster=_cluster,
                                               stud_id=item,
                                               type=False)
+                if item in medidx:
+                    cluster_res.type = True
+
                 db.session.add(cluster_res)
                 output.append(cluster_res.tojson())
-            db.session.commit()
         else:
             param_format = """algo == %s, min_supp == %f, min_conf == %f"""
             param_tuple = ('AprioriDP', args['min_supp'], args['min_conf'])
@@ -173,15 +199,14 @@ class Experiment(Resource):
                                                args['min_supp'],
                                                args['min_conf'])
             for _rule in conf_rules:
-                # stud = studDB.query.get(item)
                 rule_str = "(%s => %s, confidence==%f)" % _rule
                 rule_res = DBRuleResult(experiments=experiment,
                                         rule=rule_str)
                 db.session.add(rule_res)
                 output.append(rule_res.tojson())
-            db.session.commit()
 
         experiment.params = param_string
+        db.session.commit()
         return jsonify(output), 201
 
 
@@ -198,8 +223,8 @@ class ExperimentList(Resource):
         experiment = DBExperiment(params=None)
         db.session.add(experiment)
         db.session.commit()
-        # experiments[exp_id] = {}
-        return experiment.tojson(), 201
+
+        return "Created experiment: " + str(experiment.id), 201
 
 
 # setup
