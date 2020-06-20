@@ -9,9 +9,6 @@ import pyodbc
 import os
 import sys
 
-login = sys.argv[1]
-pwd = sys.argv[2]
-
 # Flask aplication
 app = Flask(__name__)
 
