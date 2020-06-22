@@ -20,5 +20,4 @@
 
 3.  Параметры POST запроса:
     - algo: 'PAM' или 'AprioriDP'
-    - dataset: 1 или 2 (пока поддерживается 2 датасета)
     - параметры отдельных алгоритмов: 'k', 'maxIter' для PAM или 'min_supp', 'min_conf' для AprioriDP
