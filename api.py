@@ -123,7 +123,6 @@ class Experiment(Resource):
     def post(self, exp_id):
         parser = reqparse.RequestParser()
         parser.add_argument('algo', required=True, help="algo cannot be blank")
-        parser.add_argument('dataset', type=int)
         parser.add_argument('k', type=int)
         parser.add_argument('min_supp', type=float)
         parser.add_argument('min_conf', type=float)
@@ -141,9 +140,6 @@ class Experiment(Resource):
         if experiment.params is not None:
             abort(409, message="this experiment is over, start new")
 
-        if args['dataset'] is None:
-            abort(400, message="dataset is required")
-
         if args['algo'] == 'PAM' and args['k'] is None:
             abort(400, message="parameter k is required in PAM")
 
@@ -154,13 +150,10 @@ class Experiment(Resource):
         output = []
         if args['algo'] == 'PAM':
             param_string = "algo == %s, k == %d" % ('PAM', args['k'])
-            dsnum = args['dataset']
-            if dsnum == 1:
-                dspath = os.path.abspath('./data/tutors_small.csv')
-            else:
-                dspath = os.path.abspath('./data/tutors.csv')
 
+            dspath = os.path.abspath('./data/tutors_small.csv')
             ds = pd.read_csv(dspath, sep=';', encoding='utf-8')
+
             max_iter = 10000
             if args['max_iter'] is not None:
                 max_iter = args['max_iter']
