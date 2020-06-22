@@ -175,7 +175,7 @@ def PAM(X, k, dist=tutordist, maxIter=10000):
     '''The PAM Clustering algorithm
 
     Args:
-        X : iterable of size (n_objects)
+        X : pandas dataframe of size (n_objects)
         k : desired number of clusters
         dist : distance function, default - manhattan distance
         maxIter : maximum iterations in SWAP phase
