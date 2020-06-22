@@ -1,6 +1,16 @@
 import numpy as np
 from collections import defaultdict
 
+T_1 = []
+T_1.append(frozenset(("butter", "bread", "milk", "meat")))
+T_1.append(frozenset(("butter", "bread", "meat")))
+T_1.append(frozenset(("butter", "bread")))
+T_1.append(frozenset(("bread", "milk", "meat")))
+T_1.append(frozenset(("bread", "milk")))
+T_1.append(frozenset(("milk", "meat")))
+T_1.append(frozenset(("bread", "meat")))
+default_sets = T_1
+
 
 def construct_frequent_sets(T, item2num, num2item, min_supp):
     '''Construct sets of items that satisfy min_supp constraint
@@ -136,7 +146,7 @@ def construct_rules(frequent_sets, freq_size, min_conf):
     return rules
 
 
-def apriori(T, min_supp, min_conf):
+def apriori(min_supp, min_conf, T=default_sets):
     '''Run AprioriDP on database T
 
     Args:

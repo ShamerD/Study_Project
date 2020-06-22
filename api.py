@@ -12,16 +12,8 @@ import sys
 # Flask aplication
 app = Flask(__name__)
 
-connection_string = "Driver={ODBC Driver 17 for SQL Server};"\
-                    "Server=tcp:opendataserver2020.database.windows.net;"\
-                    "Database=OpenDataDbms;"\
-                    "uid=stud20;pwd=!Student2020"
-
-cs1 = urllib.parse.quote_plus(connection_string)
-pa = "mssql+pyodbc:///?odbc_connect=%s" % cs1
-
 # SQLAlchemy
-app.config['SQLALCHEMY_DATABASE_URI'] = pa
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///db\\experiments.db'
 db = SQLAlchemy(app)
 
 # Flask_restful
@@ -113,6 +105,7 @@ class Experiment(Resource):
                 exps.append(exp.tojson())
             return jsonify(exps)
         elif 'AprioriDP' in exp_in_db.params:
+            exps = []
             for exp in DBRuleResult.query.filter_by(exp_id=exp_id):
                 exps.append(exp.tojson())
             return jsonify(exps)
@@ -168,15 +161,13 @@ class Experiment(Resource):
                 dspath = os.path.abspath('./data/tutors.csv')
 
             ds = pd.read_csv(dspath, sep=';', encoding='utf-8')
-            if args['max_iter'] is None:
-                param_string += ", maxIter == 10000"
-                medidx, clusters, totalDistance = PAM(ds,
-                                                      args['k'])
-            else:
-                param_string += (", maxIter == " + str(args['max_iter']))
-                medidx, clusters, totalDistance = PAM(ds,
-                                                      args['k'],
-                                                      maxIter=args['max_iter'])
+            max_iter = 10000
+            if args['max_iter'] is not None:
+                max_iter = args['max_iter']
+            param_string += (", maxIter == " + str(max_iter))
+            medidx, clusters, totalDistance = PAM(ds,
+                                                  args['k'],
+                                                  maxIter=max_iter)
 
             for (item, _cluster) in enumerate(clusters):
                 cluster_res = DBClusterResult(experiments=experiment,
@@ -192,8 +183,7 @@ class Experiment(Resource):
             param_format = """algo == %s, min_supp == %f, min_conf == %f"""
             param_tuple = ('AprioriDP', args['min_supp'], args['min_conf'])
             param_string = (param_format % param_tuple)
-            freq_subsets, conf_rules = apriori(args['dataset'],
-                                               args['min_supp'],
+            freq_subsets, conf_rules = apriori(args['min_supp'],
                                                args['min_conf'])
             for _rule in conf_rules:
                 rule_str = "(%s => %s, confidence==%f)" % _rule
